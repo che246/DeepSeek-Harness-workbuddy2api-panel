@@ -70,28 +70,45 @@ DSH 自带的 `@deepseek-ai/dsh-llm-pi-ai` 支持手写网关路由，但在 `co
 
 ## 安装
 
+两种方式都行：**从 Release 附件装**（推荐，不用 clone 源码），或**从源码打包装**。
+
+### 桌面版
+
+桌面版的 `desktop` profile 由 App 独占管理（独立 CLI 的 `--dump-config` 之类会被拒绝），
+但装包这条路是通的：把 tgz 放进本地插件目录，再用 DSH 自带的 CLI 装进 profile。
+
+```powershell
+# 从 Release 取附件（或自己 npm pack 出来的那个）
+copy dsh-workbuddy2api-connect-0.2.1.tgz "$env:USERPROFILE\.dsh\local-plugins\"
+cd "$env:USERPROFILE\.dsh\profiles\desktop"
+$dsh = "D:\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd"   # 换成你的安装目录
+& $dsh plugin --profile desktop add "file:$env:USERPROFILE/.dsh/local-plugins/dsh-workbuddy2api-connect-0.2.1.tgz"
+```
+
+### Web / TUI
+
 ```sh
-# 在插件源码目录打包
+dsh plugin --profile web add https://github.com/che246/DeepSeek-Harness-workbuddy2api-panel/releases/download/v0.2.1/dsh-workbuddy2api-connect-0.2.1.tgz
+```
+
+### 从源码
+
+```sh
 npm pack                        # → dsh-workbuddy2api-connect-0.2.1.tgz
 ```
 
-把 tgz 放进 DSH 的本地插件目录，再让 profile 装上它（以 Windows 桌面版为例）：
+再按上面「桌面版」或「Web / TUI」的方式装上那个 tgz。
 
-```powershell
-copy dsh-workbuddy2api-connect-0.2.1.tgz "$env:USERPROFILE\.dsh\local-plugins\"
-cd "$env:USERPROFILE\.dsh\profiles\desktop"
-# 1) 依赖（用 DSH 自带的 pnpm；这一步会顺带把包挂进 dsh.profile.bundles）
-& "D:\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add `
-  "file:$env:USERPROFILE/.dsh/local-plugins/dsh-workbuddy2api-connect-0.2.1.tgz"
-```
+### 装完
 
-然后**重启 DSH**：profile 的 patch 层与客户端 bundle 都只在启动时装配。
+**重启一次 DSH**：profile 的 patch 层与客户端 bundle 都只在启动时装配。重启后模型选择器里
+出现本插件声明的分组（默认 `work2api-AI` / `work2api-CN`），「插件」页里出现配置卡片。
 
 > ⚠️ 装/升级需要重启一次（插件在 boot 时注册 provider 路由与浏览器卡片）；此后改路由、
 > 模型表变化都不再需要重启——这正是本插件的意义。
-
-装好后模型选择器里会出现本插件声明的分组（默认 `work2api-AI` / `work2api-CN`），
-「插件」页里出现配置卡片。
+>
+> ⚠️ `dsh plugin add` 会重写 profile 的 `dsh.profile.bundles`。实测有过把别的插件从列表里
+> 挤掉的情况（本机曾挤掉 `@eghrhegpe/dsh-connect-qoder`），装完扫一眼那个列表，少了就补回去。
 
 ## 配置（cordis 层）
 
@@ -275,16 +292,14 @@ python tools/cut-release.py
 
 python tools/cut-release.py --dry-run     # 只打印计划，不动远端
 python tools/cut-release.py --tag-only    # 只打并推 tag
+python tools/cut-release.py --body-only   # 只按发布说明重写已有 Release 的正文（改错字用）
 python tools/cut-release.py --notes FILE  # 指定发布说明文件
 ```
 
 - 凭据取 `GITHUB_TOKEN`，没有就从 `~/.git-credentials`（git 的 store helper）取 github.com 那条；仓库地址从 `git remote get-url origin` 读，所以脚本不绑定具体仓库
-- 已存在的 tag 不会被动；Release 若已存在则复用，只补缺失的附件
-- 附件就是 `npm pack` 出来的 tgz，安装可以直接指它：
-
-```sh
-dsh plugin --profile web add https://github.com/che246/DeepSeek-Harness-workbuddy2api-panel/releases/download/v0.2.1/dsh-workbuddy2api-connect-0.2.1.tgz
-```
+- **已存在的 tag 不会被动**（tag 一推出去就是对外承诺）；Release 若已存在则复用，只补缺失的附件；`--body-only` 专门用来改正文而不碰 tag 与附件
+- Release 正文 = `docs/release-notes-v<版本>.md` + 自动追加的安装章节（桌面版 / Web / TUI 两条路径）；说明里自己写了 `## 安装` 就不重复追加
+- 附件就是 `npm pack` 出来的 tgz，安装可以直接指它（见上面「Web / TUI」）
 
 已发布版本：**[v0.2.1](https://github.com/che246/DeepSeek-Harness-workbuddy2api-panel/releases/tag/v0.2.1)**（tag 指向发布内容那一次提交；之后的文档/工具提交不重打 tag）。
 

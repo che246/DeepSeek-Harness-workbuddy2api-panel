@@ -86,13 +86,56 @@ def api(url: str, token: str, *, data: bytes | None = None, method: str | None =
 
 
 def install_section(slug: str, tag: str, asset: str) -> str:
+    """两条安装路径：桌面版（App 独占 profile，CLI 只用来装包）与 Web/TUI（可直接吃 URL）。"""
+    url = f'https://github.com/{slug}/releases/download/{tag}/{asset}'
     return (
-        '\n## 安装\n\n```sh\n'
-        f'dsh plugin --profile web add https://github.com/{slug}/releases/download/{tag}/{asset}\n'
+        '\n## 安装\n\n'
+        '### 桌面版\n\n'
+        '桌面版的 `desktop` profile 由 App 独占管理（独立 CLI 的 `--dump-config` 之类会被拒绝），'
+        '但装包这条路是通的：把附件放进本地插件目录，再用 DSH 自带的 CLI 装进 profile。\n\n'
+        '```powershell\n'
+        f'# 附件地址：{url}\n'
+        f'copy {asset} "$env:USERPROFILE\\.dsh\\local-plugins\\"\n'
+        'cd "$env:USERPROFILE\\.dsh\\profiles\\desktop"\n'
+        '$dsh = "D:\\Programs\\DeepSeek Harness\\resources\\runtime\\cli\\bin\\dsh.cmd"   # 换成你的安装目录\n'
+        f'& $dsh plugin --profile desktop add "file:$env:USERPROFILE/.dsh/local-plugins/{asset}"\n'
         '```\n\n'
-        '桌面版的 `desktop` profile 由 App 独占管理，按 README 的步骤装'
-        '（`dsh plugin --profile desktop add <tgz>`），**装完重启一次 DSH**。\n'
+        '### Web / TUI\n\n'
+        '```sh\n'
+        f'dsh plugin --profile web add {url}\n'
+        '```\n\n'
+        '两种方式装完都要**重启一次 DSH**：provider 路由与浏览器卡片都在 boot 时装配。'
+        '重启后「插件」页出现本插件的配置卡片，模型选择器出现配置好的分组。\n\n'
+        '> 注意：`dsh plugin add` 会重写 profile 的 `dsh.profile.bundles`。实测有过把别的插件'
+        '从列表里挤掉的情况（本机曾挤掉 `@eghrhegpe/dsh-connect-qoder`），装完扫一眼那个列表，'
+        '少了就补回去。\n'
     )
+
+
+def release_body(notes: str, slug: str, tag: str, asset: str) -> str:
+    """发布说明 + 安装说明；说明里自己写了 `## 安装` 就不重复追加。"""
+    if '## 安装' in notes:
+        return notes
+    return f'{notes}\n{install_section(slug, tag, asset)}'
+
+
+def release_title(tag: str, notes: str) -> str:
+    """标题取发布说明的第一行；那一行只是版本号时退回包描述。"""
+    first = notes.splitlines()[0].lstrip('# ').strip() if notes else ''
+    if first and first not in {tag, tag.lstrip('v'), package_version()}:
+        return f'{tag} — {first}'
+    description = package_manifest().get('description', '')
+    headline = re.split(r'[—，,。]', description)[0].strip()
+    return f'{tag} — {headline}' if headline else tag
+
+
+def tag_message(tag: str, notes: str) -> str:
+    """tag 的说明：取发布说明里第一行「有内容」的行，跳过只写着版本号的标题行。"""
+    for line in notes.splitlines():
+        text = line.strip()
+        if text and text.lstrip('# ').strip() not in {tag, tag.lstrip('v')}:
+            return text.lstrip('# ').strip()
+    return release_title(tag, notes)
 
 
 def main() -> None:
@@ -100,6 +143,7 @@ def main() -> None:
     parser.add_argument('--notes', help='发布说明文件（缺省 docs/release-notes-v<版本>.md）')
     parser.add_argument('--dry-run', action='store_true', help='只打印计划，不动远端')
     parser.add_argument('--tag-only', action='store_true', help='只打并推 tag')
+    parser.add_argument('--body-only', action='store_true', help='只按发布说明重写已有 Release 的正文（不动 tag 与附件）')
     args = parser.parse_args()
 
     version = package_version()
@@ -114,6 +158,19 @@ def main() -> None:
     asset_name = f'{package_manifest()["name"]}-{version}.tgz'
     asset_path = ROOT / asset_name
 
+    if args.body_only:
+        if args.dry_run:
+            print(f'--dry-run：将把 {slug} 的 {tag} Release 正文重写为 {len(release_body(notes, slug, tag, asset_name))} 字符')
+            return
+        token = github_token()
+        release = api(f'https://api.github.com/repos/{slug}/releases/tags/{tag}', token, allow_404=True)
+        if not isinstance(release, dict) or not release.get('id'):
+            sys.exit(f'{tag} 还没有 Release，先跑一次完整的 cut-release.py')
+        payload = json.dumps({'body': release_body(notes, slug, tag, asset_name)}, ensure_ascii=False).encode('utf-8')
+        updated = api(f'https://api.github.com/repos/{slug}/releases/{release["id"]}', token, data=payload, method='PATCH')
+        print(f'已重写正文：{updated["html_url"]}（{len(updated["body"])} 字符）')
+        return
+
     print(f'仓库      : {slug}')
     print(f'版本      : {version} → tag {tag}（{"已存在" if tag_exists else "将新建"}）')
     print(f'发布说明  : {notes_path if notes_path.exists() else "（默认文案）"}')
@@ -123,7 +180,7 @@ def main() -> None:
         return
 
     if not tag_exists:
-        run(['git', 'tag', '-a', tag, '-m', notes.splitlines()[0]])
+        run(['git', 'tag', '-a', tag, '-m', tag_message(tag, notes)])
         print(f'已创建 tag {tag}')
     run(['git', 'push', 'origin', tag])
     print(f'已推送 tag {tag}')
@@ -145,8 +202,8 @@ def main() -> None:
     else:
         payload = json.dumps({
             'tag_name': tag,
-            'name': f'{tag} — {notes.splitlines()[0].lstrip("# ").strip()}',
-            'body': f'{notes}\n{install_section(slug, tag, asset_name)}',
+            'name': release_title(tag, notes),
+            'body': release_body(notes, slug, tag, asset_name),
             'draft': False,
             'prerelease': False,
         }, ensure_ascii=False).encode('utf-8')
