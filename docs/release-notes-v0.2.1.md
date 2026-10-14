@@ -31,7 +31,7 @@
 ## 验证
 
 ```sh
-node test/verify.mjs --offline   # 27 项：映射与派生规则
+node test/verify.mjs --offline   # 28 项：映射与派生规则
 node test/verify.mjs             # 88 项：真连网关 + 真发最小对话 + 界面接口 + 客户端卡片
 ```
 

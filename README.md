@@ -235,7 +235,7 @@ pi-ai 的档位表达是一张 `thinkingLevelMap`：**键**是选择器给出的
 ## 验证
 
 ```sh
-node test/verify.mjs --offline   # 纯映射函数与派生规则，27 项
+node test/verify.mjs --offline   # 纯映射函数与派生规则，28 项
 node test/verify.mjs             # 真连网关跑一遍插件 + 真发最小对话 + 界面接口 + 客户端卡片，共 88 项
 ```
 
