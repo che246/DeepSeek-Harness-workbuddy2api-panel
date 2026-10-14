@@ -264,6 +264,30 @@ node test/verify.mjs             # 真连网关跑一遍插件 + 真发最小对
 - 依赖网关的 `/v1/models` 形态（`data[].context_length` 等字段）。条目字段名做了大小写与
   snake/camel 兼容，但私有的网关若换了字段名，需要跟着改 `normalizeEntry`。
 
+## 发布（tag / Release）
+
+版本号只写在 `package.json`。切一个版本：
+
+```sh
+# 1) 改 package.json 的 version，并写发布说明 docs/release-notes-v<版本>.md
+# 2) 一条命令走完：打 tag → 推 tag → 建 Release → 上传 npm pack 产物
+python tools/cut-release.py
+
+python tools/cut-release.py --dry-run     # 只打印计划，不动远端
+python tools/cut-release.py --tag-only    # 只打并推 tag
+python tools/cut-release.py --notes FILE  # 指定发布说明文件
+```
+
+- 凭据取 `GITHUB_TOKEN`，没有就从 `~/.git-credentials`（git 的 store helper）取 github.com 那条；仓库地址从 `git remote get-url origin` 读，所以脚本不绑定具体仓库
+- 已存在的 tag 不会被动；Release 若已存在则复用，只补缺失的附件
+- 附件就是 `npm pack` 出来的 tgz，安装可以直接指它：
+
+```sh
+dsh plugin --profile web add https://github.com/che246/DeepSeek-Harness-workbuddy2api-panel/releases/download/v0.2.1/dsh-workbuddy2api-connect-0.2.1.tgz
+```
+
+已发布版本：**[v0.2.1](https://github.com/che246/DeepSeek-Harness-workbuddy2api-panel/releases/tag/v0.2.1)**（tag 指向发布内容那一次提交；之后的文档/工具提交不重打 tag）。
+
 ## 许可
 
 MIT。本插件只做「读网关模型表 + 注册 DSH provider」，不代理、不改写、不存储任何对话内容；
