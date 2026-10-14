@@ -1,0 +1,10 @@
+# 依赖与本地联调用的 junction（验证台需要指向 DSH 自带的 @deepseek-ai / @earendil-works）
+node_modules/
+
+# npm pack 产物
+*.tgz
+
+# 本地运行痕迹
+*.log
+*.tmp
+.DS_Store

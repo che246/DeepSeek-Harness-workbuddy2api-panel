@@ -1,0 +1,27 @@
+# dsh-workbuddy2api-connect —— 把 WorkBuddy2API 网关的模型目录接进 DSH。
+#
+# 一行 insert 就够：插件在启动时拉每个路由的 `{baseURL}/models`，把模型名、思考
+# 档位（reasoningEfforts）、最大上下文、最大输出、图像能力一起映射成 DSH 的
+# provider 路由。模型表变了，下一个刷新周期自动跟上——不用改这里，不用重启。
+#
+# 路由 id 就是 provider 名，也是模型选择器里的分组名，会话与
+# `@deepseek-ai/dsh-agent-default-model` 都按它引用，所以它同时也是「换插件等于
+# 换模型引用」的那一层：这里刻意沿用原先手写路由的 id，保证既有会话与默认模型
+# 配置继续可用。
+- insert:
+    - id: llm-workbuddy2api
+      name: dsh-workbuddy2api-connect
+      config:
+        # 模型表刷新周期（分钟）。网关上新模型后最多等这么久就出现在 DSH 里。
+        refreshMinutes: 30
+        routes:
+          # 国际版（global 域）
+          - id: workbuddy2api
+            displayName: work2api-AI
+            baseURL: http://192.168.1.201:7864/v1
+            apiKeyEnv: WORKBUDDY2API_API_KEY
+          # 国内版（cn 域）
+          - id: workbuddy2apicn
+            displayName: work2api-CN
+            baseURL: http://192.168.1.201:7863/v1
+            apiKeyEnv: WORKBUDDY2APICN_API_KEY

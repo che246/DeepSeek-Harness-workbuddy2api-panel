@@ -1,0 +1,60 @@
+{
+  "name": "dsh-workbuddy2api-connect",
+  "displayName": "DSH WorkBuddy2API Connect",
+  "description": "把 WorkBuddy2API 网关的模型目录自动同步进 DeepSeek Harness —— 自动读取模型名、思考档位与最大上下文，并带一个可增删路由（分组名称 / URL / Key）的界面。",
+  "version": "0.2.1",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek",
+    "workbuddy2api",
+    "codebuddy",
+    "model-provider"
+  ],
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ]
+    }
+  },
+  "scripts": {
+    "verify": "node test/verify.mjs",
+    "verify:offline": "node test/verify.mjs --offline"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.2",
+    "@earendil-works/pi-ai": "0.87.1"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-ai": {
+      "optional": true
+    }
+  },
+  "license": "MIT"
+}
