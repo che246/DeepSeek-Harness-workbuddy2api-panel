@@ -126,8 +126,12 @@ def install_section(slug: str, tag: str, asset: str) -> str:
 
 
 def release_body(notes: str, slug: str, tag: str, asset: str) -> str:
-    """发布说明 + 安装说明；说明里自己写了 `## 安装` 就不重复追加。"""
-    if '## 安装' in notes:
+    """发布说明 + 安装说明。
+
+    「说明里已有安装章节」按**行首标题**判断，而不是整篇搜 `## 安装` 这个子串——正文里一句
+    提到安装小节的说明不该把真正的安装步骤顶掉（v0.3.0 就这么错过一次）。
+    """
+    if any(line.strip().startswith('## 安装') for line in notes.splitlines()):
         return notes
     return f'{notes}\n{install_section(slug, tag, asset)}'
 
@@ -154,13 +158,15 @@ def tag_message(tag: str, notes: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description='切一次发布')
     parser.add_argument('--notes', help='发布说明文件（缺省 docs/release-notes-v<版本>.md）')
+    parser.add_argument('--tag', help='覆盖版本 tag（缺省用 package.json 的版本；用于刷新旧版本的 Release）')
     parser.add_argument('--dry-run', action='store_true', help='只打印计划，不动远端')
     parser.add_argument('--tag-only', action='store_true', help='只打并推 tag')
     parser.add_argument('--body-only', action='store_true', help='只按发布说明重写已有 Release 的正文（不动 tag 与附件）')
     args = parser.parse_args()
 
-    version = package_version()
-    tag = f'v{version}'
+    tag = args.tag or f'v{package_version()}'
+    # 附件名用的是 tag 里的版本（`--tag v0.2.1` 时要找的是 0.2.1 那个 tgz）
+    version = tag[1:] if tag.startswith('v') else tag
     slug = origin_slug()
     notes_path = pathlib.Path(args.notes) if args.notes else ROOT / 'docs' / f'release-notes-{tag}.md'
     notes = notes_path.read_text('utf-8').strip() if notes_path.exists() else f'{tag} —— 见 README 与 tag 说明。'
