@@ -22,6 +22,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -31,8 +32,13 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 def run(args: list[str], *, check: bool = True, capture: bool = True) -> str:
-    """跑一条命令，默认捕获 stdout；失败时把 stderr 一起抛出来。"""
-    result = subprocess.run(args, cwd=ROOT, text=True, capture_output=capture, encoding='utf-8', errors='replace')
+    """跑一条命令，默认捕获 stdout；失败时把 stderr 一起抛出来。
+
+    Windows 上 `npm` 只有 `npm.cmd`，subprocess 直接调会 FileNotFoundError，所以先用
+    `shutil.which` 把可执行文件解析成全路径（`git.exe` 之类本来就找得到，解析后同样可用）。
+    """
+    executable = shutil.which(args[0]) or args[0]
+    result = subprocess.run([executable, *args[1:]], cwd=ROOT, text=True, capture_output=capture, encoding='utf-8', errors='replace')
     if check and result.returncode != 0:
         sys.exit(f'命令失败：{" ".join(args)}\n{(result.stderr or "").strip()}')
     return (result.stdout or '').strip()
