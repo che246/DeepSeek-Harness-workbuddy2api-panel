@@ -45,6 +45,21 @@ DSH  @deepseek-ai/dsh-llm-pi-ai  →  模型选择器里的一个分组（模型
 密钥去向：**DSH 凭据库**（`ctx.credentials` 的 refs，即 `~/.dsh/.credentials.yaml`），
 插件自己的配置文件里**只有凭据名、没有明文密钥**。
 
+### 显示开关：命令与思考「完全展开」
+
+卡片顶部还有一个 DSH 显示开关（**默认关闭**）：
+
+| 开关 | 写入的值 | 效果 |
+|---|---|---|
+| 关（默认） | `ui-chat.transcriptView = standard` | 折叠已完成轮次、步骤分组——DSH 桌面版默认 |
+| 开 | `ui-chat.transcriptView = verbose` | **轮次不折叠、步骤不分组**，命令与思考全部摊开 |
+
+改的是 DSH 自己那个值（**设置 → 通用 → 工作详情**，同一个 `ui-chat` 设置分节），走
+`ctx.configForms.get('ui-chat').set(...)`——宿主设置持久化 + **立即生效，不需要重启**；两边
+随时同步（卡片订阅了设置变化，在 DSH 设置页改这里也跟着变）。开关旁会标出当前档位
+（`compact` 精简 / `standard` 标准 / `detailed` 详细 / `verbose` 完全展开），四个档位都能被如实
+显示出来。宿主没有设置服务（headless）时开关禁用并说明原因，不影响网关同步。
+
 ### 配置的优先级
 
 | 来源 | 何时生效 |
@@ -75,26 +90,43 @@ DSH 自带的 `@deepseek-ai/dsh-llm-pi-ai` 支持手写网关路由，但在 `co
 ### 桌面版
 
 桌面版的 `desktop` profile 由 App 独占管理（独立 CLI 的 `--dump-config` 之类会被拒绝），
-但装包这条路是通的：把 tgz 放进本地插件目录，再用 DSH 自带的 CLI 装进 profile。
+但装包这条路是通的。
+
+**推荐：手工改两处配置再 `install`**——`dsh plugin add` 会重写 `dsh.profile.bundles`，实测会把
+其它第三方 bundle 从列表里挤掉（本机丢过 `dsh-workbuddy-connect` 与
+`@eghrhegpe/dsh-connect-qoder`）；而 `install` 只装依赖、**不动配置**。
 
 ```powershell
-# 从 Release 取附件（或自己 npm pack 出来的那个）
-copy dsh-workbuddy2api-connect-0.2.1.tgz "$env:USERPROFILE\.dsh\local-plugins\"
+# 1) 从 Release 取附件（或自己 npm pack 出来的那个）放进本地插件目录
+copy dsh-workbuddy2api-connect-0.3.0.tgz "$env:USERPROFILE\.dsh\local-plugins\"
+```
+
+2) 编辑 `%USERPROFILE%\.dsh\profiles\desktop\package.json` 两处：
+
+- `dependencies` 里加一行
+  `"dsh-workbuddy2api-connect": "file:C:/Users/<你>/.dsh/local-plugins/dsh-workbuddy2api-connect-0.3.0.tgz"`
+- `dsh.profile.bundles` 数组里追加 `"dsh-workbuddy2api-connect"`
+
+```powershell
+# 3) 装依赖（DSH 自带的 CLI 只是 pnpm install）
 cd "$env:USERPROFILE\.dsh\profiles\desktop"
 $dsh = "D:\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd"   # 换成你的安装目录
-& $dsh plugin --profile desktop add "file:$env:USERPROFILE/.dsh/local-plugins/dsh-workbuddy2api-connect-0.2.1.tgz"
+& $dsh plugin --profile desktop install
 ```
+
+> 也可以一条命令 `& $dsh plugin --profile desktop add "<附件路径>"`（自动写依赖与 bundles），
+> 但装完**务必核对 `dsh.profile.bundles`**，少了别的插件就补回去。
 
 ### Web / TUI
 
 ```sh
-dsh plugin --profile web add https://github.com/che246/DeepSeek-Harness-workbuddy2api-panel/releases/download/v0.2.1/dsh-workbuddy2api-connect-0.2.1.tgz
+dsh plugin --profile web add https://github.com/che246/DeepSeek-Harness-workbuddy2api-panel/releases/download/v0.3.0/dsh-workbuddy2api-connect-0.3.0.tgz
 ```
 
 ### 从源码
 
 ```sh
-npm pack                        # → dsh-workbuddy2api-connect-0.2.1.tgz
+npm pack                        # → dsh-workbuddy2api-connect-0.3.0.tgz
 ```
 
 再按上面「桌面版」或「Web / TUI」的方式装上那个 tgz。
@@ -107,8 +139,9 @@ npm pack                        # → dsh-workbuddy2api-connect-0.2.1.tgz
 > ⚠️ 装/升级需要重启一次（插件在 boot 时注册 provider 路由与浏览器卡片）；此后改路由、
 > 模型表变化都不再需要重启——这正是本插件的意义。
 >
-> ⚠️ `dsh plugin add` 会重写 profile 的 `dsh.profile.bundles`。实测有过把别的插件从列表里
-> 挤掉的情况（本机曾挤掉 `@eghrhegpe/dsh-connect-qoder`），装完扫一眼那个列表，少了就补回去。
+> ⚠️ `dsh plugin add` 会重写 profile 的 `dsh.profile.bundles`：本机两次升级各丢过别的插件
+> （`dsh-workbuddy-connect`、`@eghrhegpe/dsh-connect-qoder`），而 `install` 从不动配置。
+> 这也是上面推荐手工改配置的原因；用 `add` 的话装完请核对那个列表。
 
 ## 配置（cordis 层）
 
@@ -236,7 +269,7 @@ pi-ai 的档位表达是一张 `thinkingLevelMap`：**键**是选择器给出的
 
 ```sh
 node test/verify.mjs --offline   # 纯映射函数与派生规则，28 项
-node test/verify.mjs             # 真连网关跑一遍插件 + 真发最小对话 + 界面接口 + 客户端卡片，共 88 项
+node test/verify.mjs             # 真连网关跑一遍插件 + 真发最小对话 + 界面接口 + 客户端卡片，共 100 项
 ```
 
 在线模式用一个假的 Cordis 上下文把插件真跑起来（真 `apply`、真 `PiAiAdapter`、真 pi-ai、
@@ -252,7 +285,9 @@ node test/verify.mjs             # 真连网关跑一遍插件 + 真发最小对
   **不带 id 的新路由按分组名称派生**、**既有路由改名后 provider 名不变**；
 - **客户端卡片**：bundle 走 `window.__ModuleLoader__` 注册、挂到 `plugins.bundle.config`
   且注册键 = 包名、卡片只渲染「分组名称 / URL / Key」三个字段（**不再展示路由 id 与
-  凭据名**）、Key 不回显、保存体回传既有 id 且不带凭据名、「添加路由」新增一行且留空待派生。
+  凭据名**）、Key 不回显、保存体回传既有 id 且不带凭据名、「添加路由」新增一行且留空待派生；
+- **显示开关**：默认档位下开关是关的、打开写入 `verbose`、关闭写回 `standard`、
+  DSH 设置页改动会同步到开关、宿主没有设置服务时开关禁用且卡片不崩。
 
 > 验证台需要能 import DSH 自带的 `@deepseek-ai/*` 与 `@earendil-works/pi-ai`。
 > 在插件源码目录下建两个 junction 指过去即可：
@@ -301,7 +336,7 @@ python tools/cut-release.py --notes FILE  # 指定发布说明文件
 - Release 正文 = `docs/release-notes-v<版本>.md` + 自动追加的安装章节（桌面版 / Web / TUI 两条路径）；说明里自己写了 `## 安装` 就不重复追加
 - 附件就是 `npm pack` 出来的 tgz，安装可以直接指它（见上面「Web / TUI」）
 
-已发布版本：**[v0.2.1](https://github.com/che246/DeepSeek-Harness-workbuddy2api-panel/releases/tag/v0.2.1)**（tag 指向发布内容那一次提交；之后的文档/工具提交不重打 tag）。
+已发布版本：**[v0.3.0](https://github.com/che246/DeepSeek-Harness-workbuddy2api-panel/releases/tag/v0.3.0)**（界面新增「命令与思考：完全展开」开关）、**[v0.2.1](https://github.com/che246/DeepSeek-Harness-workbuddy2api-panel/releases/tag/v0.2.1)**。tag 指向发布内容那一次提交；之后的文档/工具提交不重打 tag。
 
 ## 许可
 

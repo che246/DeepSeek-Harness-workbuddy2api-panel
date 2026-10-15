@@ -762,6 +762,121 @@ const emptyUrls = rowsAfterAdd.filter((input) => input.props.placeholder === 'ht
 check('「添加路由」新增一行（id 留空待派生）', emptyNames.length === 1, `空的分组名称输入框 ${emptyNames.length} 个`)
 check('新行的分组名称与 URL 都待填', emptyNames.length === 1 && emptyUrls.length === 1)
 
+// ── 显示开关：命令与思考「完全展开」（写 ui-chat.transcriptView） ──
+
+console.log('\n[5b] 客户端卡片：命令与思考展开开关')
+
+/**
+ * 用一个全新的 React 桩重新物化客户端 bundle —— 等价于「重新挂载一次卡片」。
+ * 复用同一个桩会让 hook 槽位跨场景残留（真实挂载不会），所以每个场景各挂一次。
+ *
+ * @param ctx - 假的客户端上下文；`get('configForms')` 决定设置服务是否可用。
+ */
+function mountFresh(ctx = { get: () => undefined }) {
+  const stub = createReactStub()
+  const clientModule = loaderRegistrations[0].factory((specifier) => {
+    if (specifier === 'react') return stub
+    throw new Error(`客户端 bundle 要求了未声明的依赖：${specifier}`)
+  })
+  const slots = {
+    registered: [],
+    inject: (name, callback) => callback(),
+    register(options, Component) {
+      this.registered.push({ options, Component })
+      return () => {}
+    },
+  }
+  // 真实宿主上下文本就带 `get`（服务查找）与 `slots`，这里照同样形状造一个。
+  clientModule.apply({ ...ctx, slots })
+  const entry = slots.registered[0]
+  return {
+    options: entry.options,
+    /** 一次渲染（先归零 hook 游标）。 */
+    render: (props) => {
+      stub.__begin()
+      return entry.Component(props)
+    },
+  }
+}
+
+/** 假的 configForms：够用的 getSnapshot / subscribe / set，并记录写入。 */
+function createFakeConfigForms(initialMode) {
+  let value = { transcriptView: initialMode }
+  const listeners = new Set()
+  const writes = []
+  const form = {
+    writes,
+    getSnapshot: () => ({ value }),
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    set: async (field, next) => {
+      writes.push([field, next])
+      value = { ...value, [field]: next }
+      for (const listener of [...listeners]) listener()
+      return true
+    },
+  }
+  return {
+    form,
+    writes,
+    get: (namespace) => (namespace === 'ui-chat' ? form : undefined),
+    externalChange: (mode) => {
+      value = { ...value, transcriptView: mode }
+      for (const listener of [...listeners]) listener()
+    },
+  }
+}
+
+/** 在树里找出「命令与思考」那个开关的 checkbox。 */
+function findTranscriptSwitch(node) {
+  const label = findNode(node, (candidate) => candidate.type === 'label' && collectText(candidate).join('').includes('命令与思考：完全展开'))
+  if (label === undefined) return undefined
+  return findNode(label, (candidate) => candidate.type === 'input' && candidate.props.type === 'checkbox')
+}
+
+{
+  const forms = createFakeConfigForms('standard')
+  const mount = mountFresh({ get: (service) => (service === 'configForms' ? forms : undefined) })
+  check('插槽 inject 把 configForms 交给卡片', mount.options.inject().configForms === forms)
+  const view = mount.render({ view: 'page', configForms: forms })
+  const toggle = findTranscriptSwitch(view)
+  check('卡片渲染出「命令与思考：完全展开」开关', toggle !== undefined)
+  check('默认（standard）时开关是关闭状态', toggle?.props.checked === false, `checked=${toggle?.props.checked}`)
+  check('开关旁标出当前档位', /当前：标准（折叠）/u.test(collectText(view).join(' | ')), collectText(view).join(' | ').match(/当前：[^|]+/u)?.[0])
+
+  toggle?.props.onChange({ target: { checked: true } })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  check('打开开关写入 transcriptView=verbose', forms.writes.some(([field, value]) => field === 'transcriptView' && value === 'verbose'), JSON.stringify(forms.writes))
+  const afterOn = mount.render({ view: 'page', configForms: forms })
+  check('写入后开关保持开启（走同一份设置快照）', findTranscriptSwitch(afterOn)?.props.checked === true)
+  check('当前档位显示为完全展开', /当前：完全展开/u.test(collectText(afterOn).join(' | ')))
+
+  findTranscriptSwitch(afterOn)?.props.onChange({ target: { checked: false } })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  check('关闭开关写回 transcriptView=standard', forms.writes.some(([field, value]) => field === 'transcriptView' && value === 'standard'), JSON.stringify(forms.writes))
+}
+
+{
+  // 从 DSH 自己的设置页改成 verbose，卡片上的开关应当跟着变（订阅生效）
+  const forms = createFakeConfigForms('standard')
+  const mount = mountFresh({ get: () => forms })
+  mount.render({ view: 'page', configForms: forms })
+  forms.externalChange('verbose')
+  const synced = mount.render({ view: 'page', configForms: forms })
+  check('DSH 设置页改了档位，卡片开关跟着变（订阅同步）', findTranscriptSwitch(synced)?.props.checked === true)
+}
+
+{
+  // 没有设置服务的宿主：开关不可用，但卡片照常渲染、不抛
+  const mount = mountFresh({ get: () => undefined })
+  check('无 configForms 时 inject 给出 undefined', mount.options.inject().configForms === undefined)
+  const view = mount.render({ view: 'page' })
+  check('无 configForms 时不抛异常且给出说明', /没有设置服务/u.test(collectText(view).join(' | ')), collectText(view).join(' | ').match(/本宿主[^|]+/u)?.[0])
+  check('无 configForms 时开关禁用', findTranscriptSwitch(view)?.props.disabled === true)
+}
+
 // ────────────────────────── 收尾 ──────────────────────────
 
 console.log('\n— 插件日志 —')

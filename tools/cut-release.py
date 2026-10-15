@@ -86,29 +86,36 @@ def api(url: str, token: str, *, data: bytes | None = None, method: str | None =
 
 
 def install_section(slug: str, tag: str, asset: str) -> str:
-    """两条安装路径：桌面版（App 独占 profile，CLI 只用来装包）与 Web/TUI（可直接吃 URL）。"""
+    """两条安装路径：桌面版（手工改配置 + install，避开 add 的 bundles 重写）与 Web/TUI（直接吃 URL）。"""
     url = f'https://github.com/{slug}/releases/download/{tag}/{asset}'
     return (
         '\n## 安装\n\n'
         '### 桌面版\n\n'
         '桌面版的 `desktop` profile 由 App 独占管理（独立 CLI 的 `--dump-config` 之类会被拒绝），'
-        '但装包这条路是通的：把附件放进本地插件目录，再用 DSH 自带的 CLI 装进 profile。\n\n'
+        '但装包这条路是通的。\n\n'
+        '**建议手工改两处再 install**——`dsh plugin add` 会重写 `dsh.profile.bundles`，实测会把其它'
+        '第三方 bundle 从列表里挤掉（本机丢过 `dsh-workbuddy-connect` 与 '
+        '`@eghrhegpe/dsh-connect-qoder`）；而 `install` 只装依赖、不动配置。\n\n'
         '```powershell\n'
-        f'# 附件地址：{url}\n'
+        f'# 0) 附件地址：{url}\n'
         f'copy {asset} "$env:USERPROFILE\\.dsh\\local-plugins\\"\n'
+        '```\n\n'
+        '然后编辑 `%USERPROFILE%\\.dsh\\profiles\\desktop\\package.json` 两处：\n\n'
+        f'- `dependencies` 里加 `"dsh-workbuddy2api-connect": "file:C:/Users/<你>/.dsh/local-plugins/{asset}"`\n'
+        '- `dsh.profile.bundles` 里追加 `"dsh-workbuddy2api-connect"`\n\n'
+        '```powershell\n'
         'cd "$env:USERPROFILE\\.dsh\\profiles\\desktop"\n'
         '$dsh = "D:\\Programs\\DeepSeek Harness\\resources\\runtime\\cli\\bin\\dsh.cmd"   # 换成你的安装目录\n'
-        f'& $dsh plugin --profile desktop add "file:$env:USERPROFILE/.dsh/local-plugins/{asset}"\n'
+        '& $dsh plugin --profile desktop install\n'
         '```\n\n'
+        '> 也可以用 `& $dsh plugin --profile desktop add "<附件路径>"`（自动写依赖与 bundles），'
+        '但装完**务必核对 `dsh.profile.bundles`**，少了别的插件就补回去。\n\n'
         '### Web / TUI\n\n'
         '```sh\n'
         f'dsh plugin --profile web add {url}\n'
         '```\n\n'
         '两种方式装完都要**重启一次 DSH**：provider 路由与浏览器卡片都在 boot 时装配。'
-        '重启后「插件」页出现本插件的配置卡片，模型选择器出现配置好的分组。\n\n'
-        '> 注意：`dsh plugin add` 会重写 profile 的 `dsh.profile.bundles`。实测有过把别的插件'
-        '从列表里挤掉的情况（本机曾挤掉 `@eghrhegpe/dsh-connect-qoder`），装完扫一眼那个列表，'
-        '少了就补回去。\n'
+        '重启后「插件」页出现本插件的配置卡片，模型选择器出现配置好的分组。\n'
     )
 
 
